@@ -1,0 +1,13 @@
+{
+  "patch": "MLA W8A8 context-prefill activation dtype",
+  "validation": "Image patch preserved; source guard and syntax checked; no GPU tests rerun.",
+  "upstream": "https://github.com/vllm-project/vllm",
+  "upstream_branch": "main",
+  "base_commit": "f2654939e69b4069b13977e9aef3e31d4dcaf051",
+  "files": [
+    {
+      "path": "vllm/model_executor/layers/attention/mla_attention.py",
+      "sha256": "dec0713fdabb3b842cd8a2881265878ea6605a0e875ae1f1ef951c1340b731a0"
+    }
+  ]
+}
