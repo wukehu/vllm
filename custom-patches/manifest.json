@@ -1,0 +1,13 @@
+{
+  "status": "preserved-development-snapshot",
+  "validation": "Exact source bytes and Python syntax verified; no GPU tests rerun.",
+  "upstream": "https://github.com/vllm-project/vllm",
+  "upstream_branch": "main",
+  "base_commit": "87668ab69b3e2c849a607ece36e8a43bde7c7ee5",
+  "files": [
+    {
+      "path": "vllm/v1/metrics/stats.py",
+      "sha256": "1c62219c303cdbbc7fcfd6bfb56a98fa401d9c25104819987d27ac76d708c234"
+    }
+  ]
+}

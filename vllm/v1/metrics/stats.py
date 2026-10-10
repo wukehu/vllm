@@ -338,7 +338,8 @@ class PromptTokenStats:
         """Get token count by source label."""
         source_map = {
             "local_compute": self.computed,
-            "local_cache_hit": self.local_cache_hit,
+            "local_cache_hit": self.local_cache_
+            ,
             "external_kv_transfer": self.external_kv_transfer,
         }
         if source not in source_map:
