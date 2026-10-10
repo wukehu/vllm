@@ -1,0 +1,45 @@
+{
+  "status": "preserved-development-snapshot",
+  "validation": "Exact source bytes and Python syntax verified; no GPU tests rerun.",
+  "upstream": "https://github.com/vllm-project/vllm",
+  "upstream_branch": "main",
+  "base_commit": "89a77b10846fd96273cce78d86d2556ea582d26e",
+  "files": [
+    {
+      "path": "tests/v1/core/test_async_scheduler.py",
+      "sha256": "5f46778fbd8931e98d86333814649af295ae656183694d4e7b392a3523fe3d55"
+    },
+    {
+      "path": "tests/v1/engine/test_output_processor.py",
+      "sha256": "00fd273640e5b55e80d6ae0f357bc9c38987c329753f42fdfe654505c5783db5"
+    },
+    {
+      "path": "tests/v1/engine/utils.py",
+      "sha256": "f45a8d8d0a0ec663b2083bb120c7ce996befef8f5fe78718aa8891a64267f59e"
+    },
+    {
+      "path": "tests/v1/metrics/test_stats.py",
+      "sha256": "cf3d0c48c5967a4e8f95d4671b879fdd77567bedfa3f14ac0147a44f47f26ac1"
+    },
+    {
+      "path": "vllm/v1/core/sched/scheduler.py",
+      "sha256": "3bcc93a685ce97f5f493d36ab0761a3b4dc467b3003911e6f550b63f2ceede3c"
+    },
+    {
+      "path": "vllm/v1/engine/__init__.py",
+      "sha256": "376358e5dbeb22b9fb1b92fb14bfd32cc078af96cf916f50c8510d00660beb13"
+    },
+    {
+      "path": "vllm/v1/engine/output_processor.py",
+      "sha256": "7e1bdd91be0e5cb3aa79059937fb6c265eb42da66d755ce146f0171ac8e002b1"
+    },
+    {
+      "path": "vllm/v1/metrics/stats.py",
+      "sha256": "d7f974f041a353f7af848344086b6ebdea53128929f91f190448f71d825f6f3f"
+    },
+    {
+      "path": "vllm/v1/request.py",
+      "sha256": "82dfbe5c43810071eb9b9a2277277cb0c20e6508ff8f996b12cf67c85e57cab9"
+    }
+  ]
+}
