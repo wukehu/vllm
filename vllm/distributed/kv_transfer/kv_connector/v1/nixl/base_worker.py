@@ -14,6 +14,8 @@ from collections.abc import Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any, cast
 
+from vllm.distributed.kv_transfer.kv_connector.v1.nixl.pp_layout import matching_stage, validate_peer_stage
+
 import msgspec
 import numpy as np
 import torch
@@ -61,6 +63,7 @@ from vllm.distributed.kv_transfer.kv_connector.v1.ssm_conv_transfer_utils import
 )
 from vllm.distributed.nixl_utils import NixlWrapper, nixl_agent_config
 from vllm.distributed.parallel_state import (
+    get_pp_group,
     get_tensor_model_parallel_rank,
     get_tensor_model_parallel_world_size,
 )
@@ -425,6 +428,18 @@ class NixlBaseConnectorWorker:
         # PP>1 (push mode): this worker holds a contiguous layer slice and
         # transfers into the matching sub-range of a PP=1 remote's regions.
         self.pp_size = vllm_config.parallel_config.pipeline_parallel_size
+        self.pp_rank = get_pp_group().rank_in_group
+        self.pp_pull_same_layout = bool(
+            vllm_config.kv_transfer_config.get_from_extra_config("pp_pull_same_layout_v1", False)
+        )
+        if self.pp_pull_same_layout and vllm_config.kv_transfer_config.kv_connector not in (
+            "NixlConnector", "NixlPullConnector"
+        ):
+            raise ValueError("PP pull layout v1 requires a pull connector")
+        self.pp_pull_peer_rank = self.pp_rank if self.pp_pull_same_layout else 0
+        self.pp_pull_layers = tuple(
+            vllm_config.model_config.get_layers_start_end_indices(vllm_config.parallel_config)
+        ) if self.pp_pull_same_layout else None
         self._remote_region_offset = 0
         # PP push slices regions per layer (uniform count); HMA breaks that.
         if self.pp_size > 1 and self._is_hma_required:
@@ -433,7 +448,8 @@ class NixlBaseConnectorWorker:
                 "with hybrid KV cache layouts (HMA) yet."
             )
         # Decode-side PP is unsupported (completions counted per consumer rank).
-        if vllm_config.kv_transfer_config.kv_role == "kv_consumer" and self.pp_size > 1:
+        if (vllm_config.kv_transfer_config.kv_role == "kv_consumer"
+                and self.pp_size > 1 and not self.pp_pull_same_layout):
             raise NotImplementedError(
                 "NixlPushConnector consumer (decode) does not support "
                 "pipeline_parallel_size > 1."
@@ -600,9 +616,13 @@ class NixlBaseConnectorWorker:
         best_rtt = float("inf")
         best_offset: float | None = None
 
+        remote_pp_ranks = (
+            matching_stage(self.pp_size, self.pp_rank, remote_pp_size)
+            if self.pp_pull_same_layout else range(remote_pp_size)
+        )
         with zmq_ctx(zmq.REQ, path) as sock:
             for remote_pp_rank, remote_rank in itertools.product(
-                range(remote_pp_size), p_remote_ranks
+                remote_pp_ranks, p_remote_ranks
             ):
                 logger.debug(
                     "Querying metadata on path: %s at remote pp rank %s, tp rank %s",
@@ -688,6 +708,15 @@ class NixlBaseConnectorWorker:
                         f"Remote NIXL agent engine ID mismatch. "
                         f"Expected {expected_engine_id},"
                         f"received {metadata.engine_id}."
+                    )
+
+                if self.pp_pull_same_layout:
+                    assert self.pp_pull_layers is not None
+                    validate_peer_stage(
+                        self.pp_size, self.pp_rank, self.world_size, remote_tp_size,
+                        self.pp_pull_layers, metadata.pull_pp_version,
+                        metadata.pull_pp_size, metadata.pull_pp_rank,
+                        metadata.pull_pp_layers,
                     )
 
                 # Register Remote agent.
@@ -905,6 +934,7 @@ class NixlBaseConnectorWorker:
             meta.remote.host,
             meta.remote.port,
             meta.tp_size,
+            pp_size=meta.pp_size,
         )
         if fut is None:
             # Already handshaked — only happens if caller does not pre-check.
@@ -998,6 +1028,10 @@ class NixlBaseConnectorWorker:
         )
 
         agent_metadata = NixlAgentMetadata(
+            pull_pp_version=1 if self.pp_pull_same_layout else 0,
+            pull_pp_size=self.pp_size,
+            pull_pp_rank=self.pp_rank,
+            pull_pp_layers=self.pp_pull_layers,
             engine_id=self.engine_id,
             agent_metadata=self.nixl_wrapper.get_agent_metadata(),
             device_id=self.device_id,
@@ -1250,6 +1284,10 @@ class NixlBaseConnectorWorker:
 
         # After KV Caches registered, listen for new connections.
         agent_metadata = NixlAgentMetadata(
+            pull_pp_version=1 if self.pp_pull_same_layout else 0,
+            pull_pp_size=self.pp_size,
+            pull_pp_rank=self.pp_rank,
+            pull_pp_layers=self.pp_pull_layers,
             engine_id=self.engine_id,
             agent_metadata=self.nixl_wrapper.get_agent_metadata(),
             device_id=self.device_id,
@@ -1522,20 +1560,21 @@ class NixlBaseConnectorWorker:
         """  # noqa: E501
         engine_id = nixl_agent_meta.engine_id
         # TODO re-evaluate refreshing for scaling/recovery
-        if (0, remote_tp_rank) in self._remote_agents.get(engine_id, {}):
+        if (self.pp_pull_peer_rank, remote_tp_rank) in self._remote_agents.get(engine_id, {}):
             logger.debug(
                 "Remote agent with engine_id %s and rank"
                 "%s already exchanged metadata, skip handshake.",
                 engine_id,
                 remote_tp_rank,
             )
-            return self._remote_agents[engine_id][(0, remote_tp_rank)]
+            return self._remote_agents[engine_id][(self.pp_pull_peer_rank, remote_tp_rank)]
 
         # Compare physical regions, not self.num_regions (doubled by
         # FlashInfer's virtual K/V split).
         num_local_regions = len(self.block_len_per_layer)
         if (
             self.pp_size > 1
+            and not self.pp_pull_same_layout
             and len(nixl_agent_meta.kv_caches_base_addr) > num_local_regions
         ):
             # This worker holds a PP layer-slice; the PP=1 remote registered

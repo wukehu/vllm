@@ -58,6 +58,10 @@ class NixlAgentMetadata:
     ssm_sizes: tuple[int, int]
     attn_backend_name: str
     physical_blocks_per_logical_kv_block: int
+    pull_pp_version: int = 0
+    pull_pp_size: int = 1
+    pull_pp_rank: int = 0
+    pull_pp_layers: tuple[int, int] | None = None
 
 
 @dataclass

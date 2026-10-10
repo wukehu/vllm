@@ -3,6 +3,7 @@
 """Pull-specific (READ) worker-side logic for the NIXL connector."""
 
 import time
+from vllm.distributed.kv_transfer.kv_connector.v1.nixl.pp_layout import matching_stage
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -51,6 +52,10 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
                 meta.local_block_ids, self._physical_blocks_per_logical_kv_block
             )
             assert meta.remote is not None
+            if self.pp_pull_same_layout:
+                matching_stage(self.pp_size, self.pp_rank, meta.pp_size)
+                if meta.tp_size != self.world_size:
+                    raise ValueError("NIXL PP pull requires identical TP sizes")
             # Remote block IDs are kept logical here; expanded in
             # _read_blocks_for_req using the remote engine's phys ratio.
             remote_engine_id = meta.remote.engine_id
@@ -209,7 +214,7 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
             notif_id = f"{meta.remote.request_id}:{self.world_size}".encode()
             remote_agents = self._remote_agents[meta.remote.engine_id]
             for rank_to_notify, agent in remote_agents.items():
-                if rank_to_notify != (0, read_specs[0].remote_rank):
+                if rank_to_notify != (self.pp_pull_peer_rank, read_specs[0].remote_rank):
                     self.nixl_wrapper.send_notif(agent, notif_msg=notif_id)
 
     def _read_blocks(
@@ -276,7 +281,7 @@ class NixlPullConnectorWorker(NixlBaseConnectorWorker):
         # just notify P worker that we have the blocks we need.
         if len(local_block_ids) == 0:
             # A full prefix cache hit is indicated with an empty list.
-            agent_name = self._remote_agents[dst_engine_id][(0, remote_rank)]
+            agent_name = self._remote_agents[dst_engine_id][(self.pp_pull_peer_rank, remote_rank)]
             try:
                 self.nixl_wrapper.send_notif(agent_name, notif_msg=notif_id)
             except Exception as e:
