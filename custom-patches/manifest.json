@@ -1,11 +1,11 @@
 {
-  "status": "preserved-runtime-overlay-not-a-release",
-  "companion_lmcache_branch": "feature-runtime-pp-exp30-preserved-20261010",
+  "status": "integrated-image-candidate",
+  "companion_lmcache_branch": "feature-runtime-v026-lmc055",
   "includes": "MLA W8A8 fix inherited from parent plus six recorded NIXL PP files",
-  "validation": "Recorded overlay hashes and Python syntax verified; full build and GPU tests not rerun.",
+  "validation": "Source hashes matched the pinned exp30 runtime; image rebuild and targeted validation recorded separately. No new model replay implied.",
   "upstream": "https://github.com/vllm-project/vllm",
   "upstream_branch": "main",
-  "base_commit": "be87817cf27ae01fa7390fcb48c5324aa55cdc58",
+  "base_commit": "f2654939e69b4069b13977e9aef3e31d4dcaf051",
   "files": [
     {
       "path": "vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py",
@@ -30,6 +30,12 @@
     {
       "path": "vllm/v1/core/sched/scheduler.py",
       "sha256": "ed3516d212f07fca6003ffe1c9b41d41734ed8231f3b8f33c90aaa311f747a4c"
+    },
+    {
+      "path": "vllm/model_executor/layers/attention/mla_attention.py",
+      "sha256": "dec0713fdabb3b842cd8a2881265878ea6605a0e875ae1f1ef951c1340b731a0"
     }
-  ]
+  ],
+  "branch": "feature-runtime-v026-lmc055",
+  "companion_branch": "feature-runtime-v026-lmc055"
 }
