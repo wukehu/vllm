@@ -1397,6 +1397,10 @@ if (VLLM_GPU_LANG STREQUAL "HIP")
   vllm_finalize_hipify_target()
 endif()
 
+if(VLLM_NATIVE_CORE_ONLY)
+  return()
+endif()
+
 # For CUDA and HIP builds also build the triton_kernels external package.
 if(VLLM_GPU_LANG STREQUAL "CUDA" OR VLLM_GPU_LANG STREQUAL "HIP")
     include(cmake/external_projects/triton_kernels.cmake)

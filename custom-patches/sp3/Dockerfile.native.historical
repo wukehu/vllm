@@ -1,0 +1,29 @@
+FROM intellif.io/dynamo/vllm-runtime@sha256:6c6e596a1c1c715e5493480de2f837480281ab1664ce9bc8569233e1706ad14b AS native
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+RUN python3 -m pip install --no-cache-dir 'cmake==3.31.6'
+COPY v026-native-source.tar.gz /tmp/source.tar.gz
+RUN mkdir /native-source && tar -xzf /tmp/source.tar.gz -C /native-source
+COPY native-build-seed.tar.gz /tmp/native-build-seed.tar.gz
+RUN mkdir -p /native-build && tar -xzf /tmp/native-build-seed.tar.gz -C /native-build
+COPY verify_build_graph.py /tmp/verify_build_graph.py
+ENV TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;8.9;9.0;10.0;12.0"
+RUN --mount=type=cache,target=/native-deps \
+    cmake -U '*GEN_SCRIPT_HASH*' -S /native-source -B /native-build -G Ninja \
+      -DVLLM_PYTHON_EXECUTABLE="$(command -v python3)" \
+      -DCMAKE_BUILD_TYPE=Release -DFETCHCONTENT_BASE_DIR=/native-deps \
+      -DVLLM_NATIVE_CORE_ONLY=ON \
+      -DCUDA_nvrtc_LIBRARY=/usr/local/cuda/lib64/libnvrtc.so.13 \
+      -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90;100;120" \
+    && python3 /tmp/verify_build_graph.py \
+ && cmake --build /native-build --target _C_stable_libtorch --parallel 8
+
+FROM intellif.io/dynamo/vllm-runtime@sha256:6c6e596a1c1c715e5493480de2f837480281ab1664ce9bc8569233e1706ad14b
+USER root
+COPY --from=native /native-build/_C_stable_libtorch.abi3.so /usr/local/lib/python3.12/dist-packages/vllm/_C_stable_libtorch.abi3.so
+COPY preserved-native.json base-native-operators-loaded.json /opt/sp1-rmsnorm/
+COPY native-build-manifest-parallel8.json /opt/sp1-rmsnorm/native-build-manifest.json
+COPY verify_native_cpu_v2.py /opt/sp1-rmsnorm/verify_native.py
+RUN python3 /opt/sp1-rmsnorm/verify_native.py && python3 /opt/sp1/verify.py
+LABEL io.intellif.vllm.rmsnorm-fix="upstream-48391-norm-only" \
+      io.intellif.vllm.rmsnorm-mode="existing-batch-invariant-opt-in"

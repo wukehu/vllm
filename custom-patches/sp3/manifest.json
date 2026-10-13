@@ -1,0 +1,86 @@
+{
+  "component": "vllm",
+  "branch": "release-sp3",
+  "base_commit": "f2654939e69b4069b13977e9aef3e31d4dcaf051",
+  "image": "intellif.io/dynamo/vllm-runtime:1.4.0-mooncake-0.3.12-lmcache-0.5.5-cuda13-sp3",
+  "image_digest": "sha256:d8d83d33c73f7f9e4f2cff478e5bd9167e124f66ee26208f81910b49aca6064c",
+  "source_files": {
+    "vllm/model_executor/layers/attention/mla_attention.py": "dec0713fdabb3b842cd8a2881265878ea6605a0e875ae1f1ef951c1340b731a0",
+    "vllm/v1/core/sched/scheduler.py": "f55385352ab20c8e17ec973c3aa0cce18c242d878bf7085857525040b87d4db4",
+    "csrc/libtorch_stable/layernorm_kernels.cu": "7823a206f92d5f15c4c2ccb94b0ef385e20f14c024f8564a362562a9a91c75fd",
+    "CMakeLists.txt": "de03b878b5d5dad05c2e212759063aa05c8a72dc334dfb8fd6578033da9ed6b9"
+  },
+  "PP_gt_1_experimental_included": false,
+  "native_sha256": "c0648ae3a740862e7e200ec3e5199b99126d4fc548213eb235a55f1234bce7d6",
+  "build_manifest_original": {
+    "base_image": "intellif.io/dynamo/vllm-runtime@sha256:6c6e596a1c1c715e5493480de2f837480281ab1664ce9bc8569233e1706ad14b",
+    "vllm_tag": "v0.26.0",
+    "source_commit": "f2654939e69b4069b13977e9aef3e31d4dcaf051",
+    "native_target": "_C_stable_libtorch",
+    "changed_source_files": [
+      "csrc/libtorch_stable/layernorm_kernels.cu"
+    ],
+    "build_harness_adjustment": {
+      "file": "CMakeLists.txt",
+      "purpose": "return after native target definitions; omit independent external projects only",
+      "original_sha256": "88eb0477dd7349c2011ac742fb5421a50ca557c30e7d7d090cfd467775ec9198",
+      "patched_sha256": "de03b878b5d5dad05c2e212759063aa05c8a72dc334dfb8fd6578033da9ed6b9"
+    },
+    "patch_sha256": "e69e3949f44b1ad493aff245aa06eb88e133c9c4a8999a40947e4c542a1a1d31",
+    "original_norm_sha256": "faaf442f9a520eb7d636acac06b7b52a1765da9b5db13d0d818ff2e1e2537a82",
+    "patched_norm_sha256": "7823a206f92d5f15c4c2ccb94b0ef385e20f14c024f8564a362562a9a91c75fd",
+    "source_archive_sha256": "cece49b0141df3961a718b8bdbc4aa79de698bff2df576d64e9cc56f711fb883",
+    "preserve_architectures": [
+      "sm_100",
+      "sm_120",
+      "sm_75",
+      "sm_80",
+      "sm_86",
+      "sm_89",
+      "sm_90",
+      "sm_90a"
+    ],
+    "preserve_other_native_modules": true,
+    "preserve_all_existing_python_overlays": true,
+    "no_global_batch_invariant_default_change": true,
+    "PP_gt_1_included": false,
+    "build_verified": false,
+    "production_accepted": false,
+    "build_acceleration": {
+      "CPU_parallelism": 8,
+      "seed_sha256": "9353af61e5ece8260b0adc0c16bae97441236dc1f0294b5a8dcb38a218bdbe39",
+      "seed_completed_object_count_observed": 40,
+      "reason": "56 host CPUs, 113.9 GiB free RAM, host load 2.3 with parallel2",
+      "runtime_sources_and_architectures_unchanged": true
+    }
+  },
+  "build_manifest_original_is_historical_not_current_acceptance": true,
+  "installed_python_files": {
+    "vllm/model_executor/layers/attention/mla_attention.py": "dec0713fdabb3b842cd8a2881265878ea6605a0e875ae1f1ef951c1340b731a0",
+    "vllm/v1/core/sched/scheduler.py": "f55385352ab20c8e17ec973c3aa0cce18c242d878bf7085857525040b87d4db4"
+  },
+  "image_line_endings": {
+    "vllm/model_executor/layers/attention/mla_attention.py": "lf",
+    "vllm/v1/core/sched/scheduler.py": "lf"
+  },
+  "source_normalization": "Git source uses LF. Reconstruct image CRLF only for files explicitly listed as crlf when creating an overlay; source text is identical.",
+  "overlay_files": {
+    "vllm/model_executor/layers/attention/mla_attention.py": {
+      "git_lf_sha256": "dec0713fdabb3b842cd8a2881265878ea6605a0e875ae1f1ef951c1340b731a0",
+      "image_sha256": "dec0713fdabb3b842cd8a2881265878ea6605a0e875ae1f1ef951c1340b731a0",
+      "image_eol": "lf"
+    },
+    "vllm/v1/core/sched/scheduler.py": {
+      "git_lf_sha256": "f55385352ab20c8e17ec973c3aa0cce18c242d878bf7085857525040b87d4db4",
+      "image_sha256": "f55385352ab20c8e17ec973c3aa0cce18c242d878bf7085857525040b87d4db4",
+      "image_eol": "lf"
+    }
+  },
+  "delivery_kind": "SP3 source archive; native clean rebuild and production acceptance are separate",
+  "validation": {
+    "python_source_image_byte_verification": "passed via explicit newline reconstruction",
+    "diff_check": "passed",
+    "native_clean_rebuild": "not performed",
+    "numerical_equivalence": "deferred"
+  }
+}

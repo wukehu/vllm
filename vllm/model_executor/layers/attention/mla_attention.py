@@ -2217,10 +2217,13 @@ class MLACommonBaseImpl(MLAAttentionImpl[A], Generic[A]):
             )
             # For NVFP4, weights are packed uint8 — keep input in model dtype
             # since the NVFP4 linear layer quantizes internally.
-            if (
+            if _kv_b_proj_w_dtype == torch.int8:
+                # W8A8 quantizes floating-point activations inside kv_b_proj.
+                kv_c_normed = kv_c_normed.to(self.kv_b_proj.params_dtype)
+            elif (
                 use_fp8_prefill or _kv_b_proj_w_dtype != current_platform.fp8_dtype()
             ) and _kv_b_proj_w_dtype != torch.uint8:
-                kv_c_normed = kv_c_normed.to(self.kv_b_proj.weight.dtype)
+                kv_c_normed = kv_c_normed.to(_kv_b_proj_w_dtype)
 
             k_pe = workspace[:toks][..., self.kv_lora_rank :].unsqueeze(1)
             kv_nope = self.kv_b_proj(kv_c_normed)[0].view(
