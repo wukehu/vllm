@@ -34,6 +34,16 @@ from vllm.v1.outputs import KVConnectorOutput, KVConnectorWorkerMetadata
 
 MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
 
+
+def test_engine_prefix_consumption_callback_is_forwarded_to_children():
+    connector = MultiConnector.__new__(MultiConnector)
+    children = [MagicMock(spec=KVConnectorBase_V1), MagicMock(spec=KVConnectorBase_V1)]
+    connector._connectors = children
+    connector.on_model_step_completed("req", 511)
+    for child in children:
+        child.on_model_step_completed.assert_called_once_with("req", 511)
+
+
 PROMPT_CONTEXT = "Hi " * 100
 PROMPTS = [
     PROMPT_CONTEXT + "Hello, my name is",

@@ -2,9 +2,10 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
 from collections.abc import Callable
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
+from transformers import OPTConfig
 
 from vllm.v1.core.sched.scheduler import Scheduler
 from vllm.v1.request import Request, RequestStatus
@@ -29,9 +30,44 @@ def _make_get_num_new_matched_tokens(
 
 
 @pytest.fixture
-def scheduler():
-    vllm_config = create_vllm_config(kv_load_failure_policy="recompute")
+def scheduler(tmp_path):
+    # Scheduler-only tests require model metadata, never downloaded weights.
+    OPTConfig(architectures=["OPTForCausalLM"]).save_pretrained(tmp_path)
+    vllm_config = create_vllm_config(
+        model=str(tmp_path), kv_load_failure_policy="recompute"
+    )
+    # The consumption hook currently has an explicit synchronous PP1 contract.
+    vllm_config.scheduler_config.async_scheduling = False
     return create_scheduler(vllm_config)
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_consumption_telemetry_does_not_count_cancelled_or_fail_serving(
+    scheduler, cancelled
+):
+    request = create_request(num_tokens=32)
+    scheduler.connector = Mock()
+    scheduler.connector.get_num_new_matched_tokens.return_value = (16, False)
+    scheduler.connector.request_finished.return_value = (False, None)
+    scheduler.connector.take_events.return_value = ()
+    scheduler.connector.get_kv_connector_stats.return_value = None
+    scheduler.connector.on_model_step_completed.side_effect = RuntimeError(
+        "export failed"
+    )
+    scheduler.add_request(request)
+    scheduled = scheduler.schedule()
+    if cancelled:
+        scheduler.finish_requests([request.request_id], RequestStatus.FINISHED_ABORTED)
+    scheduler.update_from_output(
+        scheduled, create_model_runner_output([request], use_eos=True)
+    )
+    if cancelled:
+        scheduler.connector.on_model_step_completed.assert_not_called()
+    else:
+        scheduler.connector.on_model_step_completed.assert_called_once_with(
+            request.request_id, 16
+        )
+        assert request.is_finished()
 
 
 @pytest.mark.parametrize(
@@ -185,6 +221,12 @@ def test_sync_load_failure(
     )
     assert scheduler.connector.get_num_new_matched_tokens.call_count == 3
     assert scheduler.connector.request_finished.call_count == 2
+    # Only successful rows may claim the pre-step external prefix. The failed
+    # request is about to recompute and must not be counted as external reuse.
+    assert scheduler.connector.on_model_step_completed.call_args_list == [
+        call(request1.request_id, num_external_computed_tokens),
+        call(request3.request_id, num_external_computed_tokens),
+    ]
 
 
 @pytest.mark.parametrize(

@@ -534,6 +534,16 @@ class KVConnectorBase_V1(ABC):
         """
         return
 
+    def on_model_step_completed(self, request_id: str, prefix_tokens: int) -> None:
+        """Observe a successfully executed step using this pre-step KV prefix.
+
+        Telemetry only: this does not authorize KV ownership or validate numeric
+        correctness. Currently emitted for synchronous PP1 non-speculative steps,
+        after invalid-load and cancelled-request filtering, before request cleanup.
+        The default implementation is a no-op for existing connectors.
+        """
+        return
+
     def update_connector_output(self, connector_output: KVConnectorOutput):
         """
         Update KVConnector state from worker-side connectors output.

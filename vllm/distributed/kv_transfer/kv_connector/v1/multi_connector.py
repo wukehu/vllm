@@ -415,6 +415,11 @@ class MultiConnector(KVConnectorBase_V1, SupportsHMA):
         for c in self._connectors:
             c.on_new_request(request)
 
+    def on_model_step_completed(self, request_id: str, prefix_tokens: int) -> None:
+        """Forward engine execution evidence; each child owns its own allocation."""
+        for c in self._connectors:
+            c.on_model_step_completed(request_id, prefix_tokens)
+
     def build_connector_meta(
         self, scheduler_output: SchedulerOutput
     ) -> MultiKVConnectorMetadata:

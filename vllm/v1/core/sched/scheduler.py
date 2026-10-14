@@ -1623,6 +1623,28 @@ class Scheduler(SchedulerInterface):
                 num_scheduled_tokens,
             )
 
+        # Snapshot model-input prefix lengths, not the mutable request counters
+        # which scheduling has already advanced. Async/PP/speculative execution
+        # needs a per-frame allocation identity and is deliberately not inferred.
+        completed_step_prefixes: dict[str, int] = {}
+        if (
+            self.connector is not None
+            and not self.scheduler_config.async_scheduling
+            and not self.use_pp
+            and not scheduler_output.scheduled_spec_decode_tokens
+        ):
+            completed_step_prefixes = {
+                req.req_id: req.num_computed_tokens
+                for req in scheduler_output.scheduled_new_reqs
+            }
+            completed_step_prefixes.update(
+                zip(
+                    scheduler_output.scheduled_cached_reqs.req_ids,
+                    scheduler_output.scheduled_cached_reqs.num_computed_tokens,
+                    strict=True,
+                )
+            )
+
         # Persist per-step routed experts into the scheduler-side slot
         # buffer (CPU->CPU fancy-index assign; ~few MB per step).
         # MUST precede the per-request routing reads below: stopped
@@ -1804,6 +1826,21 @@ class Scheduler(SchedulerInterface):
                     prefill_stats.finalize(
                         self.kv_cache_manager.estimate_cached_tokens(request)
                     )
+
+            if (
+                self.connector is not None
+                and req_id in completed_step_prefixes
+                and req_id not in (scheduler_output.preempted_req_ids or ())
+                and status_before_stop == RequestStatus.RUNNING
+                and request.status != RequestStatus.FINISHED_ERROR
+            ):
+                try:
+                    self.connector.on_model_step_completed(
+                        req_id, completed_step_prefixes[req_id]
+                    )
+                except Exception:
+                    # An exporter failure must not abort a successful inference.
+                    logger.exception("KV consumption telemetry failed for a model step")
 
             finish_reason = None
             if stopped:
