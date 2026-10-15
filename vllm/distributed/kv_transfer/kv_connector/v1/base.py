@@ -544,6 +544,21 @@ class KVConnectorBase_V1(ABC):
         """
         return
 
+    def on_model_step_completed_with_metadata(
+        self,
+        request_id: str,
+        prefix_tokens: int,
+        metadata: KVConnectorMetadata | None,
+        connector_output: KVConnectorOutput | None = None,
+    ) -> None:
+        """Observe completion against the original frame's allocation metadata.
+
+        Called after successful model output and invalid-load/cancellation filters,
+        before request cleanup. Existing connectors retain their two-argument hook.
+        This is telemetry only and must not synchronize GPU work or release blocks.
+        """
+        self.on_model_step_completed(request_id, prefix_tokens)
+
     def update_connector_output(self, connector_output: KVConnectorOutput):
         """
         Update KVConnector state from worker-side connectors output.

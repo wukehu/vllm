@@ -23,6 +23,7 @@ from vllm.distributed.kv_transfer.kv_connector.v1.base import (
 from vllm.distributed.kv_transfer.kv_connector.v1.metrics import KVConnectorStats
 from vllm.distributed.kv_transfer.kv_connector.v1.multi_connector import (
     MultiConnector,
+    MultiKVConnectorMetadata,
     MultiKVConnectorStats,
     MultiKVConnectorWorkerMetadata,
 )
@@ -42,6 +43,26 @@ def test_engine_prefix_consumption_callback_is_forwarded_to_children():
     connector.on_model_step_completed("req", 511)
     for child in children:
         child.on_model_step_completed.assert_called_once_with("req", 511)
+
+
+def test_frame_completion_routes_only_each_child_metadata():
+    connector = MultiConnector.__new__(MultiConnector)
+    children = [MagicMock(spec=KVConnectorBase_V1), MagicMock(spec=KVConnectorBase_V1)]
+    connector._connectors = children
+    snapshots = (object(), object())
+    metadata = MultiKVConnectorMetadata(metadata=snapshots)
+    output = KVConnectorOutput()
+    connector.on_model_step_completed_with_metadata("req", 511, metadata, output)
+    for child, snapshot in zip(children, snapshots):
+        child.on_model_step_completed_with_metadata.assert_called_once_with(
+            "req", 511, snapshot, output
+        )
+
+
+def test_frame_completion_keeps_legacy_connector_hook_compatible():
+    connector = MagicMock(spec=KVConnectorBase_V1)
+    KVConnectorBase_V1.on_model_step_completed_with_metadata(connector, "req", 511, None)
+    connector.on_model_step_completed.assert_called_once_with("req", 511)
 
 
 PROMPT_CONTEXT = "Hi " * 100

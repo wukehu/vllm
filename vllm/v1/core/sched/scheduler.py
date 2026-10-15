@@ -1624,12 +1624,11 @@ class Scheduler(SchedulerInterface):
             )
 
         # Snapshot model-input prefix lengths, not the mutable request counters
-        # which scheduling has already advanced. Async/PP/speculative execution
-        # needs a per-frame allocation identity and is deliberately not inferred.
+        # which later async scheduling may already have advanced. The original
+        # frame metadata carries connector allocation identity; PP/spec remain gated.
         completed_step_prefixes: dict[str, int] = {}
         if (
             self.connector is not None
-            and not self.scheduler_config.async_scheduling
             and not self.use_pp
             and not scheduler_output.scheduled_spec_decode_tokens
         ):
@@ -1739,6 +1738,7 @@ class Scheduler(SchedulerInterface):
             ec_transfer_params = None
             prefill_stats = None
             status_before_stop = request.status
+            discarded_async_frame = getattr(request, "async_tokens_to_discard", 0) > 0
             num_output_tokens_before = len(request._output_token_ids)
 
             # Check for stop and update request status.
@@ -1832,11 +1832,15 @@ class Scheduler(SchedulerInterface):
                 and req_id in completed_step_prefixes
                 and req_id not in (scheduler_output.preempted_req_ids or ())
                 and status_before_stop == RequestStatus.RUNNING
+                and not discarded_async_frame
                 and request.status != RequestStatus.FINISHED_ERROR
             ):
                 try:
-                    self.connector.on_model_step_completed(
-                        req_id, completed_step_prefixes[req_id]
+                    self.connector.on_model_step_completed_with_metadata(
+                        req_id,
+                        completed_step_prefixes[req_id],
+                        scheduler_output.kv_connector_metadata,
+                        kv_connector_output,
                     )
                 except Exception:
                     # An exporter failure must not abort a successful inference.

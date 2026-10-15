@@ -51,21 +51,20 @@ def test_consumption_telemetry_does_not_count_cancelled_or_fail_serving(
     scheduler.connector.request_finished.return_value = (False, None)
     scheduler.connector.take_events.return_value = ()
     scheduler.connector.get_kv_connector_stats.return_value = None
-    scheduler.connector.on_model_step_completed.side_effect = RuntimeError(
+    scheduler.connector.on_model_step_completed_with_metadata.side_effect = RuntimeError(
         "export failed"
     )
     scheduler.add_request(request)
     scheduled = scheduler.schedule()
     if cancelled:
         scheduler.finish_requests([request.request_id], RequestStatus.FINISHED_ABORTED)
-    scheduler.update_from_output(
-        scheduled, create_model_runner_output([request], use_eos=True)
-    )
+    completed_output = create_model_runner_output([request], use_eos=True)
+    scheduler.update_from_output(scheduled, completed_output)
     if cancelled:
-        scheduler.connector.on_model_step_completed.assert_not_called()
+        scheduler.connector.on_model_step_completed_with_metadata.assert_not_called()
     else:
-        scheduler.connector.on_model_step_completed.assert_called_once_with(
-            request.request_id, 16
+        scheduler.connector.on_model_step_completed_with_metadata.assert_called_once_with(
+            request.request_id, 16, scheduled.kv_connector_metadata, completed_output.kv_connector_output
         )
         assert request.is_finished()
 
@@ -223,9 +222,9 @@ def test_sync_load_failure(
     assert scheduler.connector.request_finished.call_count == 2
     # Only successful rows may claim the pre-step external prefix. The failed
     # request is about to recompute and must not be counted as external reuse.
-    assert scheduler.connector.on_model_step_completed.call_args_list == [
-        call(request1.request_id, num_external_computed_tokens),
-        call(request3.request_id, num_external_computed_tokens),
+    assert scheduler.connector.on_model_step_completed_with_metadata.call_args_list == [
+        call(request1.request_id, num_external_computed_tokens, scheduler_output.kv_connector_metadata, model_runner_output.kv_connector_output),
+        call(request3.request_id, num_external_computed_tokens, scheduler_output.kv_connector_metadata, model_runner_output.kv_connector_output),
     ]
 
 
@@ -379,3 +378,40 @@ def test_async_progressive_load_failure(
         assert request.status == RequestStatus.WAITING_FOR_REMOTE_KVS
         assert scheduler.failed_recving_kv_req_ids == {request.request_id}
         assert scheduler.connector.get_num_new_matched_tokens.call_count == 1
+
+
+@pytest.mark.parametrize("failure", [None, "cancelled", "discarded", "invalid_load"])
+def test_async_completion_uses_original_frame_prefix_and_metadata(tmp_path, failure):
+    OPTConfig(architectures=["OPTForCausalLM"]).save_pretrained(tmp_path)
+    config = create_vllm_config(model=str(tmp_path), kv_load_failure_policy="recompute")
+    config.scheduler_config.async_scheduling = True
+    scheduler = create_scheduler(config)
+    connector = Mock()
+    scheduler.connector = connector
+    connector.get_num_new_matched_tokens.return_value = (16, False)
+    connector.request_finished.return_value = (False, None)
+    connector.take_events.return_value = ()
+    connector.get_kv_connector_stats.return_value = None
+    frames = [object(), object()]
+    connector.build_connector_meta.side_effect = frames
+    request = create_request(num_tokens=32)
+    scheduler.add_request(request)
+    first = scheduler.schedule()
+    second = scheduler.schedule()
+    assert request.num_computed_tokens > first.scheduled_new_reqs[0].num_computed_tokens
+    if failure == "cancelled":
+        scheduler.finish_requests([request.request_id], RequestStatus.FINISHED_ABORTED)
+    elif failure == "discarded":
+        request.async_tokens_to_discard = 1
+    invalid_blocks = {first.scheduled_new_reqs[0].block_ids[0][0]} if failure == "invalid_load" else None
+    output = create_model_runner_output([request], use_eos=False, invalid_block_ids=invalid_blocks)
+    scheduler.update_from_output(first, output)
+    if failure:
+        connector.on_model_step_completed_with_metadata.assert_not_called()
+    else:
+        connector.on_model_step_completed_with_metadata.assert_called_once_with(
+            request.request_id, 16, frames[0], output.kv_connector_output
+        )
+        connector.on_model_step_completed_with_metadata.reset_mock()
+        scheduler.update_from_output(second, create_model_runner_output([request], use_eos=False))
+        assert connector.on_model_step_completed_with_metadata.call_args.args[2] is frames[1]

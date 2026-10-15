@@ -420,6 +420,21 @@ class MultiConnector(KVConnectorBase_V1, SupportsHMA):
         for c in self._connectors:
             c.on_model_step_completed(request_id, prefix_tokens)
 
+    def on_model_step_completed_with_metadata(
+        self,
+        request_id: str,
+        prefix_tokens: int,
+        metadata: KVConnectorMetadata | None,
+        connector_output: KVConnectorOutput | None = None,
+    ) -> None:
+        """Route each child's immutable allocation snapshot with the completion."""
+        if not isinstance(metadata, MultiKVConnectorMetadata):
+            return
+        for child, child_metadata in zip(self._connectors, metadata.metadata, strict=True):
+            child.on_model_step_completed_with_metadata(
+                request_id, prefix_tokens, child_metadata, connector_output
+            )
+
     def build_connector_meta(
         self, scheduler_output: SchedulerOutput
     ) -> MultiKVConnectorMetadata:
